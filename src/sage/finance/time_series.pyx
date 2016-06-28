@@ -1744,6 +1744,40 @@ cdef class TimeSeries:
         coeffs = numpy.polyfit(v0,v1,1)
         return coeffs[0]
 
+    def hurst_madogram(self):
+        """
+        This version of the hurst exponent uses the madogram (a variation method)
+        referenced to in [Gneiting, T, Sevcikova, H, and Percival, D; 
+        Estimators of Fractal Dimension: Assessing the Roughness of Time Series
+        and Spatial Data (2012)]
+
+        The hurst_exponent() method uses the rescaled-range algorithm, and is quite
+        biased on some of the example shown the documentation there.  The madogram
+        method is hailed by Gneiting, et. al. as being the least biased of several
+        methods of computing the Hurst exponent and fractal dimension of Time
+        Series data.
+
+        Here we implement a numpy version of the algorithm, which during my 
+        initial testing and development yielded a faster result by about 
+        4 times the speed of using methods specific to this TimeSeries class.
+
+        #TODO
+        provide some more documentation, examples (timing and bias vs 'rs' method),
+         tests, etc.
+        """
+        data = self.numpy(copy=False)
+        p = 1
+        v = []
+        n = self._length
+        lags = [1,2]
+        m = len(lags)
+        import numpy
+        for  i from 0 <= i < m:
+            lag = lags[i]
+            v.append(numpy.sum(numpy.abs(data[lag+1:n] - 
+                data[1:n-lag]))**p / (2*(n - lag)))
+        return (numpy.log(v[1]) - numpy.log(v[0])) / (numpy.log(2))
+
     def min(self, bint index=False):
         """
         Return the smallest value in this time series. If this series
