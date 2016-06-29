@@ -1744,39 +1744,84 @@ cdef class TimeSeries:
         coeffs = numpy.polyfit(v0,v1,1)
         return coeffs[0]
 
-    def hurst_madogram(self):
+    def hurst_variation(self, double p=1):
         """
-        This version of the hurst exponent uses the madogram (a variation method)
-        referenced to in [Gneiting, T, Sevcikova, H, and Percival, D; 
-        Estimators of Fractal Dimension: Assessing the Roughness of Time Series
-        and Spatial Data (2012)]
+        Returns the hurst exponent using the power variation method referenced
+        to in [GSP].
 
-        The hurst_exponent() method uses the rescaled-range algorithm, and is quite
-        biased on some of the example shown the documentation there.  The madogram
-        method is hailed by Gneiting, et. al. as being the least biased of several
-        methods of computing the Hurst exponent and fractal dimension of Time
-        Series data.
+        INPUT:
 
-        Here we implement a numpy version of the algorithm, which during my 
-        initial testing and development yielded a faster result by about 
-        4 times the speed of using methods specific to this TimeSeries class.
+        - ``p`` -- double (default: 1) alternative values ``p = 0.5`` or
+        ``p = 2``
 
-        #TODO
-        provide some more documentation, examples (timing and bias vs 'rs' method),
-         tests, etc.
+        OUTPUT:
+
+        - float -- the hurst exponent given by the variation method
+
+        EXAMPLES:
+
+          NOTE::
+              The hurst_exponent() method uses the rescaled-range algorithm, 
+              and is quite biased on some of the example shown the documentation
+              there.  The madogram method is hailed by [GSP] as being the most
+              robust of several methods of computing the Hurst exponent and
+              fractal dimension of Time Series data.
+
+              Here we implement a numpy version of the algorithm, which during
+              my initial testing and development yielded a faster result by
+              about 4 times the speed of using methods specific to this
+              TimeSeries class.
+
+              [GSP] point out arguments that the bias will increase with the
+              number of lags, and also that it has been shown that the mean
+              squared error (MSE) of the estimator (for a Gaussian process)
+              is minimized when the number of lags, L = 2. This implementation
+              has fixed the number of lags to be 2. This allows us to directly
+              compute the Hurst estimate as
+              $$(\log{V_p(2)} - \log{V_p(1)}) / (p \times \log{2})$$
+              rather than computing a log-log regression for several lags.
+
+              A note on p - the power of the variation:
+              Each of these methods works well with Gaussian processes. But,...
+              p = 1/2 -- rodogram
+                Fairly resistant to outliers
+
+              p = 1   -- madogram
+                Resistant to outliers and efficient for a larger class of
+                non-Gaussian processes.  Might not work so well on a jump
+                process with several jumps (this may be worth investigating
+                further with a jump diffusion process since we are most likely
+                dealing with financial time series here.)
+
+              p = 2   -- variogram
+                Least resistant to outliers, especially for non-Gaussian
+                processes.
+
+              Gneiting et.al. argue that p = 1 (madogram) is the most robust
+              variation method.  This implementation defaults to p = 1.
+
+          TODO::
+          provide EXAMPLES (timing and bias vs 'rs' method), tests, etc.
+
+        REFERENCES:
+          [GSP] Gneiting, Sevcikova, and Percival; 2012;
+          "Estimators of Fractal Dimension: Assessing the Roughness
+          of Time Series and Spatial Data; https://arxiv.org/pdf/1101.1444.pdf
+
         """
+        #TODO implement error for p not .5, 1, or 2
+        cdef Py_ssize_t i
         data = self.numpy(copy=False)
-        p = 1
         v = []
         n = self._length
         lags = [1,2]
         m = len(lags)
-        import numpy
+        import numpy as np
         for  i from 0 <= i < m:
             lag = lags[i]
-            v.append(numpy.sum(numpy.abs(data[lag+1:n] - 
-                data[1:n-lag]))**p / (2*(n - lag)))
-        return (numpy.log(v[1]) - numpy.log(v[0])) / (numpy.log(2))
+            v.append(np.sum(np.abs(data[lag:] - 
+                data[:-lag])) / p*(2*(n - lag)))
+        return (np.log(v[1]) - np.log(v[0])) / (np.log(2))
 
     def min(self, bint index=False):
         """
